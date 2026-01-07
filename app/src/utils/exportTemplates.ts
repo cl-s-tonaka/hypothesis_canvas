@@ -1,4 +1,3 @@
-// exportTemplates.ts
 // 仮説キャンバス全履歴エクスポート用テンプレート・関数
 import { PromptStep } from "../types/prompt";
 

@@ -220,21 +220,6 @@ export default function HypothesisCanvasApp() {
         {/* 中央：ステップ詳細 or 仮説キャンバスまとめ */}
         <main className="flex-1 p-6 overflow-auto flex flex-col gap-6 items-start">
           <div className="w-full max-w-[calc(100vw-400px)] pr-[400px] flex flex-col gap-6">
-            {/* エクスポートボタン */}
-            <div className="flex gap-2 mb-2">
-              <button
-                className="px-3 py-1 rounded bg-green-600 text-white text-sm font-semibold hover:bg-green-700 border border-green-700"
-                onClick={handleExportMarkdown}
-              >
-                Markdownでエクスポート
-              </button>
-              <button
-                className="px-3 py-1 rounded bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 border border-blue-700"
-                onClick={handleExportCSV}
-              >
-                CSVでエクスポート
-              </button>
-            </div>
           {currentStep < PROMPT_STEPS.length ? (
             <>
               <h2 className="text-2xl font-bold mb-4">
@@ -415,7 +400,7 @@ export default function HypothesisCanvasApp() {
               </button>
             ))}
           </div>
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto mb-4">
             <div className="bg-white dark:bg-zinc-900 rounded-lg shadow p-3 border border-zinc-200 dark:border-zinc-800">
               <div className="font-semibold text-xs mb-1 text-blue-700">{ALL_STEPS[historyTab].id}. {ALL_STEPS[historyTab].title}</div>
               <div className="text-xs text-zinc-500 mb-2">{ALL_STEPS[historyTab].description}</div>
@@ -427,6 +412,25 @@ export default function HypothesisCanvasApp() {
                 )}
               </div>
             </div>
+          </div>
+          {/* エクスポート枠（出力形式選択） */}
+          <div className="bg-white dark:bg-zinc-900 rounded-lg shadow p-4 border border-zinc-200 dark:border-zinc-800 flex flex-col gap-3 mt-auto">
+            <h4 className="font-bold text-sm mb-2 text-blue-700 dark:text-blue-300">出力</h4>
+            <div className="flex gap-2">
+              <button
+                className="px-3 py-1 rounded bg-green-600 text-white text-sm font-semibold hover:bg-green-700 border border-green-700"
+                onClick={handleExportMarkdown}
+              >
+                Markdown形式
+              </button>
+              <button
+                className="px-3 py-1 rounded bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 border border-blue-700"
+                onClick={handleExportCSV}
+              >
+                CSV形式
+              </button>
+            </div>
+            <p className="text-xs text-zinc-500 mt-2">全ステップの入力・AI出力・日時を選択形式でダウンロードできます。</p>
           </div>
         </aside>
       </div>
