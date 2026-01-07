@@ -90,5 +90,13 @@ export const HYPOTHESIS_CANVAS_SUMMARY_STEP = {
   template: '',
 };
 
+// 15. 自由記述ステップ
+export const FREE_INPUT_STEP = {
+  id: 15,
+  title: '自由記述',
+  description: 'これまでのステップの履歴を踏まえて、自由に記述・AI生成できるステップです',
+  template: '',
+};
+
 // まとめステップを含めた全体配列
-export const ALL_STEPS = [...PROMPT_STEPS, HYPOTHESIS_CANVAS_SUMMARY_STEP];
+export const ALL_STEPS = [...PROMPT_STEPS, HYPOTHESIS_CANVAS_SUMMARY_STEP, FREE_INPUT_STEP];

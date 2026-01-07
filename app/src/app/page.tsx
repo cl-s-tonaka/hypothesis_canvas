@@ -258,7 +258,7 @@ export default function HypothesisCanvasApp() {
                 </div>
               )}
             </>
-          ) : (
+          ) : currentStep === PROMPT_STEPS.length ? (
             // まとめステップ
             <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-md p-6 border border-zinc-200 dark:border-zinc-800 flex flex-col gap-4">
               <h2 className="text-xl font-bold mb-2 text-blue-700 dark:text-blue-300">仮説キャンバスまとめ</h2>
@@ -324,6 +324,40 @@ export default function HypothesisCanvasApp() {
                 </div>
               </div>
             </div>
+          ) : (
+            // 15: 自由記述ステップ
+            <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-md p-6 border border-zinc-200 dark:border-zinc-800 flex flex-col gap-4">
+              <h2 className="text-xl font-bold mb-2 text-blue-700 dark:text-blue-300">Step 15: 自由記述</h2>
+              <p className="mb-4 text-zinc-600 dark:text-zinc-400">これまでのステップの履歴を踏まえて、自由に記述・AI生成できるステップです。</p>
+              <textarea
+                className="w-full h-32 p-2 border border-zinc-300 dark:border-zinc-700 rounded mb-4 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                placeholder="ここに自由に入力してください..."
+                value={userInputs[currentStep]}
+                onChange={handleInputChange}
+                disabled={loading}
+              />
+              <div className="mb-4">
+                <button
+                  className={`px-4 py-2 mr-2 rounded text-white ${loading ? "bg-zinc-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"}`}
+                  onClick={handleRunStep}
+                  disabled={loading}
+                >
+                  {loading ? "実行中..." : "AIに依頼"}
+                </button>
+              </div>
+              {error && <p className="mb-4 text-red-600">エラー: {error}</p>}
+              {aiOutputs[currentStep] && (
+                <div className="border-t border-zinc-300 dark:border-zinc-700 pt-4">
+                  <h3 className="text-xl font-bold mb-2">AI出力結果:</h3>
+                  <div className="prose dark:prose-invert">
+                    <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
+                      {aiOutputs[currentStep]}
+                    </ReactMarkdown>
+                  </div>
+                  <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">生成日時: {new Date(timestamps[currentStep]).toLocaleString()}</p>
+                </div>
+              )}
+            </div>
           )}
         </div>
         </main>
@@ -331,7 +365,7 @@ export default function HypothesisCanvasApp() {
         <aside className="w-[340px] min-w-[220px] max-w-[400px] border-l border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-4 overflow-auto h-screen rounded-none shadow-none flex flex-col gap-2" style={{ position: 'fixed', right: 0, top: 0, height: '100vh', zIndex: 30 }}>
           <h3 className="text-base font-bold mb-2 text-blue-700 dark:text-blue-300">全ステップ出力履歴</h3>
           <div className="flex flex-row gap-1 mb-2 overflow-x-auto">
-            {PROMPT_STEPS.map((step, idx) => (
+            {ALL_STEPS.map((step, idx) => (
               <button
                 key={step.id}
                 className={`px-2 py-1 rounded-t text-xs font-semibold border-b-2 ${historyTab === idx ? "border-blue-600 bg-white dark:bg-zinc-900" : "border-transparent bg-zinc-100 dark:bg-zinc-800"}`}
@@ -343,8 +377,8 @@ export default function HypothesisCanvasApp() {
           </div>
           <div className="flex-1 overflow-auto">
             <div className="bg-white dark:bg-zinc-900 rounded-lg shadow p-3 border border-zinc-200 dark:border-zinc-800">
-              <div className="font-semibold text-xs mb-1 text-blue-700">{PROMPT_STEPS[historyTab].id}. {PROMPT_STEPS[historyTab].title}</div>
-              <div className="text-xs text-zinc-500 mb-2">{PROMPT_STEPS[historyTab].description}</div>
+              <div className="font-semibold text-xs mb-1 text-blue-700">{ALL_STEPS[historyTab].id}. {ALL_STEPS[historyTab].title}</div>
+              <div className="text-xs text-zinc-500 mb-2">{ALL_STEPS[historyTab].description}</div>
               <div className="prose prose-zinc dark:prose-invert whitespace-pre-wrap text-xs">
                 {aiOutputs[historyTab] ? (
                   <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{aiOutputs[historyTab]}</ReactMarkdown>
