@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import { PROMPT_STEPS, ALL_STEPS, HYPOTHESIS_CANVAS_SUMMARY_STEP } from "../data/prompts";
+import CanvasPurposeStep from "./step0-purpose";
 import { generateMarkdownExport, generateCSVExport } from "../utils/exportTemplates";
 
 type StepStatus = "not-started" | "in-progress" | "completed" | "waiting";
@@ -25,7 +26,9 @@ export default function HypothesisCanvasApp() {
   const defaultOutputs = Array(ALL_STEPS.length).fill("");
   const defaultTimestamps = Array(ALL_STEPS.length).fill("");
 
-  const [currentStep, setCurrentStep] = useState(0); // 0-indexed
+  // ステップは1〜N（目的は分離）
+  // currentStep: number (step index) | 'purpose' (目的画面)
+  const [currentStep, setCurrentStep] = useState<number | 'purpose'>(0); // 0-indexed: ALL_STEPS[0]がステップ1
   const [userInputs, setUserInputs] = useState<string[]>(defaultInputs);
   const [aiOutputs, setAiOutputs] = useState<string[]>(defaultOutputs);
   const [timestamps, setTimestamps] = useState<string[]>(defaultTimestamps);
@@ -97,15 +100,19 @@ export default function HypothesisCanvasApp() {
   }, []);
 
   // ステップ状態判定
+  // ステップ状態は色分けのみで、どこからでも遷移可能
   const getStepStatus = (idx: number): StepStatus => {
-    if (idx < currentStep) return "completed";
-    if (idx === currentStep) return "in-progress";
-    if (idx === currentStep + 1 && aiOutputs[currentStep]) return "waiting";
+    if (typeof currentStep === 'number') {
+      if (idx < currentStep) return "completed";
+      if (idx === currentStep) return "in-progress";
+      return "not-started";
+    }
     return "not-started";
   };
 
   // 入力変更
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (typeof currentStep !== 'number') return;
     const newInputs = [...userInputs];
     newInputs[currentStep] = e.target.value;
     setUserInputs(newInputs);
@@ -114,6 +121,7 @@ export default function HypothesisCanvasApp() {
 
   // ステップ実行
   const handleRunStep = async () => {
+    if (typeof currentStep !== 'number') return;
     setLoading(true);
     setError("");
     try {
@@ -164,6 +172,7 @@ export default function HypothesisCanvasApp() {
 
   // 次のステップへ
   const handleNextStep = () => {
+    if (typeof currentStep !== 'number') return;
     if (aiOutputs[currentStep]) {
       const nextStep = currentStep + 1;
       setCurrentStep(nextStep);
@@ -205,14 +214,24 @@ export default function HypothesisCanvasApp() {
             <li
               key={step.id}
               className={`flex items-center gap-2 cursor-pointer ${currentStep === idx ? "font-bold text-blue-600 bg-blue-50 dark:bg-zinc-800" : idx < PROMPT_STEPS.length && getStepStatus(idx) === "completed" ? "text-green-600" : "text-zinc-500"}`}
+              style={{ cursor: 'pointer' }}
               onClick={() => setCurrentStep(idx)}
               title={idx < PROMPT_STEPS.length ? "クリックで編集・再実行" : "まとめ画面へ"}
             >
               <span>{step.id}.</span>
               <span>{step.title}</span>
-              {idx < PROMPT_STEPS.length && getStepStatus(idx) === "waiting" && <span className="ml-1 text-xs bg-yellow-200 text-yellow-800 rounded px-1">選択待ち</span>}
             </li>
           ))}
+          {/* 目的画面への遷移ボタン（ステップ風UI） */}
+          <li
+            className={`flex items-center gap-2 cursor-pointer ${currentStep === 'purpose' ? "font-bold text-blue-600 bg-blue-50 dark:bg-zinc-800" : "text-zinc-500"}`}
+            onClick={() => setCurrentStep('purpose')}
+            title="仮説キャンバス作成の狙いを見る"
+          >
+            <span>🎯</span>
+            <span>仮説キャンバス作成の狙い</span>
+            {currentStep === 'purpose' && <span className="ml-1 text-xs bg-blue-200 text-blue-800 rounded px-1">目的</span>}
+          </li>
         </ol>
       </aside>
       {/* メイン＋履歴を横並びで分離 */}
@@ -220,7 +239,9 @@ export default function HypothesisCanvasApp() {
         {/* 中央：ステップ詳細 or 仮説キャンバスまとめ */}
         <main className="flex-1 p-6 overflow-auto flex flex-col gap-6 items-start">
           <div className="w-full max-w-[calc(100vw-400px)] pr-[400px] flex flex-col gap-6">
-          {currentStep < PROMPT_STEPS.length ? (
+          {currentStep === 'purpose' ? (
+            <CanvasPurposeStep />
+          ) : typeof currentStep === 'number' && currentStep < PROMPT_STEPS.length ? (
             <>
               <h2 className="text-2xl font-bold mb-4">
                 Step {PROMPT_STEPS[currentStep].id}: {PROMPT_STEPS[currentStep].title}
@@ -250,7 +271,7 @@ export default function HypothesisCanvasApp() {
               <textarea
                 className="w-full h-32 p-2 border border-zinc-300 dark:border-zinc-700 rounded mb-4 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
                 placeholder="ここに入力してください..."
-                value={userInputs[currentStep]}
+                value={typeof currentStep === 'number' ? userInputs[currentStep] : ''}
                 onChange={handleInputChange}
                 disabled={loading}
               />
@@ -271,7 +292,7 @@ export default function HypothesisCanvasApp() {
                 </button>
               </div>
               {error && <p className="mb-4 text-red-600">エラー: {error}</p>}
-              {aiOutputs[currentStep] && (
+              {typeof currentStep === 'number' && aiOutputs[currentStep] && (
                 <div className="border-t border-zinc-300 dark:border-zinc-700 pt-4">
                   <h3 className="text-xl font-bold mb-2">AI出力結果:</h3>
                   <div className="prose dark:prose-invert">
@@ -283,7 +304,7 @@ export default function HypothesisCanvasApp() {
                 </div>
               )}
             </>
-          ) : currentStep === PROMPT_STEPS.length ? (
+          ) : typeof currentStep === 'number' && currentStep === PROMPT_STEPS.length ? (
             // まとめステップ
             <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-md p-6 border border-zinc-200 dark:border-zinc-800 flex flex-col gap-4">
               <h2 className="text-xl font-bold mb-2 text-blue-700 dark:text-blue-300">仮説キャンバスまとめ</h2>
@@ -357,7 +378,7 @@ export default function HypothesisCanvasApp() {
               <textarea
                 className="w-full h-32 p-2 border border-zinc-300 dark:border-zinc-700 rounded mb-4 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
                 placeholder="ここに自由に入力してください..."
-                value={userInputs[currentStep]}
+                value={typeof currentStep === 'number' ? userInputs[currentStep] : ''}
                 onChange={handleInputChange}
                 disabled={loading}
               />
@@ -371,7 +392,7 @@ export default function HypothesisCanvasApp() {
                 </button>
               </div>
               {error && <p className="mb-4 text-red-600">エラー: {error}</p>}
-              {aiOutputs[currentStep] && (
+              {typeof currentStep === 'number' && aiOutputs[currentStep] && (
                 <div className="border-t border-zinc-300 dark:border-zinc-700 pt-4">
                   <h3 className="text-xl font-bold mb-2">AI出力結果:</h3>
                   <div className="prose dark:prose-invert">
