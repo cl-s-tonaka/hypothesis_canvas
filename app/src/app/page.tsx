@@ -1,9 +1,9 @@
 
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
-import { PROMPT_STEPS } from "../data/prompts";
+import { PROMPT_STEPS, ALL_STEPS, HYPOTHESIS_CANVAS_SUMMARY_STEP } from "../data/prompts";
 
 type StepStatus = "not-started" | "in-progress" | "completed" | "waiting";
 
@@ -20,9 +20,9 @@ export default function HypothesisCanvasApp() {
   };
 
   // 初期値
-  const defaultInputs = Array(PROMPT_STEPS.length).fill("");
-  const defaultOutputs = Array(PROMPT_STEPS.length).fill("");
-  const defaultTimestamps = Array(PROMPT_STEPS.length).fill("");
+  const defaultInputs = Array(ALL_STEPS.length).fill("");
+  const defaultOutputs = Array(ALL_STEPS.length).fill("");
+  const defaultTimestamps = Array(ALL_STEPS.length).fill("");
 
   const [currentStep, setCurrentStep] = useState(0); // 0-indexed
   const [userInputs, setUserInputs] = useState<string[]>(defaultInputs);
@@ -31,7 +31,44 @@ export default function HypothesisCanvasApp() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // 履歴の保存
+  // --- 仮説キャンバスまとめ用 state/handler 追加 ---
+  const [canvasContent, setCanvasContent] = useState<string[]>(Array(14).fill(""));
+  const [canvasResult, setCanvasResult] = useState<string>("");
+  const [historyTab, setHistoryTab] = useState<number>(0);
+
+  // キャンバス作成ボタン押下時のAI生成
+  const handleCanvasGenerate = useCallback(async () => {
+    setCanvasResult("");
+    // 各ステップの出力を文脈としてまとめプロンプトを生成
+    const context = PROMPT_STEPS.map((step, idx) =>
+      `【Step${step.id}】${step.title}\n${aiOutputs[idx] || ""}`
+    ).join("\n\n");
+    const prompt = `以下は仮説キャンバス作成のための各ステップの出力です。\n${context}\n\n各ステップの内容を踏まえて仮説キャンバスを作成してください。\nMarkdownで部屋分け図の各部屋に適切な内容を穴埋めしてください。`;
+    try {
+      const res = await fetch("/api/openai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setCanvasResult(data.result);
+      // 部屋ごとに内容を分割してUIにも反映（仮: 1行目ずつ）
+      const lines = (data.result || "").split(/\n/).filter(Boolean);
+      // 1-14項目を抽出（仮: "1."~"14."で始まる行）
+      const newContent = Array(14).fill("");
+      for (let i = 0; i < lines.length; ++i) {
+        const m = lines[i].match(/^(\d+)\.[^:：]*[:：](.*)$/);
+        if (m) {
+          const idx = parseInt(m[1], 10) - 1;
+          if (idx >= 0 && idx < 14) newContent[idx] = m[2].trim();
+        }
+      }
+      setCanvasContent(newContent);
+    } catch (e) {
+      setCanvasResult("AI生成エラー: " + (e as any).message);
+    }
+  }, [aiOutputs]);
   const saveHistory = (inputs: string[], outputs: string[], stamps: string[], step: number) => {
     if (typeof window === "undefined") return;
     const data: StepHistory = {
@@ -139,83 +176,186 @@ export default function HypothesisCanvasApp() {
       <aside className="w-1/5 min-w-[240px] border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-6 overflow-auto">
         <h2 className="text-lg font-bold mb-4">仮説キャンバスステップ</h2>
         <ol className="list-decimal list-inside space-y-2">
-          {PROMPT_STEPS.map((step, idx) => (
+          {ALL_STEPS.map((step, idx) => (
             <li
               key={step.id}
-              className={`flex items-center gap-2 cursor-pointer ${getStepStatus(idx) === "in-progress" ? "font-bold text-blue-600" : getStepStatus(idx) === "completed" ? "text-green-600" : "text-zinc-500"} ${currentStep === idx ? "bg-blue-50 dark:bg-zinc-800" : ""}`}
+              className={`flex items-center gap-2 cursor-pointer ${currentStep === idx ? "font-bold text-blue-600 bg-blue-50 dark:bg-zinc-800" : idx < PROMPT_STEPS.length && getStepStatus(idx) === "completed" ? "text-green-600" : "text-zinc-500"}`}
               onClick={() => setCurrentStep(idx)}
-              title="クリックで編集・再実行"
+              title={idx < PROMPT_STEPS.length ? "クリックで編集・再実行" : "まとめ画面へ"}
             >
               <span>{step.id}.</span>
               <span>{step.title}</span>
-              {getStepStatus(idx) === "waiting" && <span className="ml-1 text-xs bg-yellow-200 text-yellow-800 rounded px-1">選択待ち</span>}
+              {idx < PROMPT_STEPS.length && getStepStatus(idx) === "waiting" && <span className="ml-1 text-xs bg-yellow-200 text-yellow-800 rounded px-1">選択待ち</span>}
             </li>
           ))}
         </ol>
       </aside>
-      {/* 右ペイン：ステップ詳細 */}
-      <main className="flex-1 p-6 overflow-auto">
-        <h2 className="text-2xl font-bold mb-4">
-          Step {PROMPT_STEPS[currentStep].id}: {PROMPT_STEPS[currentStep].title}
-        </h2>
-        <p className="mb-4 text-zinc-600 dark:text-zinc-400">{PROMPT_STEPS[currentStep].description}</p>
-        {/* テンプレート表示と自動入力ボタン */}
-        <div className="mb-2 flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-500">テンプレート例</span>
-            <button
-              type="button"
-              className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200"
-              onClick={() => {
-                const newInputs = [...userInputs];
-                newInputs[currentStep] = PROMPT_STEPS[currentStep]?.template || "";
-                setUserInputs(newInputs);
-              }}
-              disabled={loading}
-            >
-              このテンプレートで自動入力
-            </button>
-          </div>
-          <pre className="whitespace-pre-wrap text-xs bg-zinc-100 dark:bg-zinc-800 rounded p-2 overflow-x-auto border border-zinc-200 dark:border-zinc-700">
-            {PROMPT_STEPS[currentStep]?.template}
-          </pre>
-        </div>
-        <textarea
-          className="w-full h-32 p-2 border border-zinc-300 dark:border-zinc-700 rounded mb-4 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
-          placeholder="ここに入力してください..."
-          value={userInputs[currentStep]}
-          onChange={handleInputChange}
-          disabled={loading}
-        />
-        <div className="mb-4">
-          <button
-            className={`px-4 py-2 mr-2 rounded text-white ${loading ? "bg-zinc-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"}`}
-            onClick={handleRunStep}
-            disabled={loading}
-          >
-            {loading ? "実行中..." : "ステップ実行"}
-          </button>
-          <button
-            className={`px-4 py-2 rounded text-white ${aiOutputs[currentStep] ? "bg-green-600 hover:bg-green-700" : "bg-zinc-400 cursor-not-allowed"}`}
-            onClick={handleNextStep}
-            disabled={!aiOutputs[currentStep]}
-          >
-            次のステップへ
-          </button>
-        </div>
-        {error && <p className="mb-4 text-red-600">エラー: {error}</p>}
-        {aiOutputs[currentStep] && (
-          <div className="border-t border-zinc-300 dark:border-zinc-700 pt-4">
-            <h3 className="text-xl font-bold mb-2">AI出力結果:</h3>
-            <div className="prose dark:prose-invert">
-              <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
-                {aiOutputs[currentStep]}
-              </ReactMarkdown>
+      {/* メイン＋履歴を横並びで分離 */}
+      <div className="flex flex-1 h-full">
+        {/* 中央：ステップ詳細 or 仮説キャンバスまとめ */}
+        <main className="flex-1 p-6 overflow-auto flex flex-col gap-6 items-start">
+          <div className="w-full max-w-[calc(100vw-400px)] pr-[400px] flex flex-col gap-6">
+          {currentStep < PROMPT_STEPS.length ? (
+            <>
+              <h2 className="text-2xl font-bold mb-4">
+                Step {PROMPT_STEPS[currentStep].id}: {PROMPT_STEPS[currentStep].title}
+              </h2>
+              <p className="mb-4 text-zinc-600 dark:text-zinc-400">{PROMPT_STEPS[currentStep].description}</p>
+              {/* テンプレート表示と自動入力ボタン */}
+              <div className="mb-2 flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-zinc-500">テンプレート例</span>
+                  <button
+                    type="button"
+                    className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200"
+                    onClick={() => {
+                      const newInputs = [...userInputs];
+                      newInputs[currentStep] = PROMPT_STEPS[currentStep]?.template || "";
+                      setUserInputs(newInputs);
+                    }}
+                    disabled={loading}
+                  >
+                    このテンプレートで自動入力
+                  </button>
+                </div>
+                <pre className="whitespace-pre-wrap text-xs bg-zinc-100 dark:bg-zinc-800 rounded p-2 overflow-x-auto border border-zinc-200 dark:border-zinc-700">
+                  {PROMPT_STEPS[currentStep]?.template}
+                </pre>
+              </div>
+              <textarea
+                className="w-full h-32 p-2 border border-zinc-300 dark:border-zinc-700 rounded mb-4 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                placeholder="ここに入力してください..."
+                value={userInputs[currentStep]}
+                onChange={handleInputChange}
+                disabled={loading}
+              />
+              <div className="mb-4">
+                <button
+                  className={`px-4 py-2 mr-2 rounded text-white ${loading ? "bg-zinc-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"}`}
+                  onClick={handleRunStep}
+                  disabled={loading}
+                >
+                  {loading ? "実行中..." : "ステップ実行"}
+                </button>
+                <button
+                  className={`px-4 py-2 rounded text-white ${aiOutputs[currentStep] ? "bg-green-600 hover:bg-green-700" : "bg-zinc-400 cursor-not-allowed"}`}
+                  onClick={handleNextStep}
+                  disabled={!aiOutputs[currentStep]}
+                >
+                  次のステップへ
+                </button>
+              </div>
+              {error && <p className="mb-4 text-red-600">エラー: {error}</p>}
+              {aiOutputs[currentStep] && (
+                <div className="border-t border-zinc-300 dark:border-zinc-700 pt-4">
+                  <h3 className="text-xl font-bold mb-2">AI出力結果:</h3>
+                  <div className="prose dark:prose-invert">
+                    <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
+                      {aiOutputs[currentStep]}
+                    </ReactMarkdown>
+                  </div>
+                  <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">生成日時: {new Date(timestamps[currentStep]).toLocaleString()}</p>
+                </div>
+              )}
+            </>
+          ) : (
+            // まとめステップ
+            <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-md p-6 border border-zinc-200 dark:border-zinc-800 flex flex-col gap-4">
+              <h2 className="text-xl font-bold mb-2 text-blue-700 dark:text-blue-300">仮説キャンバスまとめ</h2>
+              <p className="mb-2 text-zinc-600 dark:text-zinc-400 text-sm">全ステップの内容をもとに仮説キャンバス図を表示します。ボタン押下で内容が埋まります。</p>
+              {/* 仮説キャンバス図（部屋分けUI） */}
+              <div className="w-full flex flex-col items-center gap-2">
+                <div className="w-full max-w-2xl aspect-[2/1] relative bg-zinc-50 dark:bg-zinc-800 border rounded-lg shadow p-2 mb-2 flex flex-col">
+                  {/* 上段: A.対象 */}
+                  <div className="flex flex-row h-1/2">
+                    <div className="flex-1 border-r border-b border-zinc-300 dark:border-zinc-700 p-2 flex flex-col">
+                      <div className="font-bold text-xs mb-1 text-blue-700">A.対象</div>
+                      <div className="text-xs font-semibold">1.ビジョン</div>
+                      <div className="text-xs min-h-[1.5em]">{canvasContent[0]}</div>
+                      <div className="text-xs font-semibold mt-1">2.状況</div>
+                      <div className="text-xs min-h-[1.5em]">{canvasContent[1]}</div>
+                      <div className="text-xs font-semibold mt-1">3.傾向</div>
+                      <div className="text-xs min-h-[1.5em]">{canvasContent[2]}</div>
+                      <div className="text-xs font-semibold mt-1">4.顕在課題</div>
+                      <div className="text-xs min-h-[1.5em]">{canvasContent[3]}</div>
+                      <div className="text-xs font-semibold mt-1">5.代替手段</div>
+                      <div className="text-xs min-h-[1.5em]">{canvasContent[4]}</div>
+                      <div className="text-xs font-semibold mt-1">6.潜在課題</div>
+                      <div className="text-xs min-h-[1.5em]">{canvasContent[5]}</div>
+                      <div className="text-xs font-semibold mt-1">7.チャネル</div>
+                      <div className="text-xs min-h-[1.5em]">{canvasContent[6]}</div>
+                      <div className="text-xs font-semibold mt-1">8.市場規模</div>
+                      <div className="text-xs min-h-[1.5em]">{canvasContent[7]}</div>
+                    </div>
+                    {/* B.主体 */}
+                    <div className="flex-1 border-b border-zinc-300 dark:border-zinc-700 p-2 flex flex-col">
+                      <div className="font-bold text-xs mb-1 text-green-700">B.主体</div>
+                      <div className="text-xs font-semibold">9.目的</div>
+                      <div className="text-xs min-h-[1.5em]">{canvasContent[8]}</div>
+                      <div className="text-xs font-semibold mt-1">10.提案価値</div>
+                      <div className="text-xs min-h-[1.5em]">{canvasContent[9]}</div>
+                      <div className="text-xs font-semibold mt-1">11.実現手段</div>
+                      <div className="text-xs min-h-[1.5em]">{canvasContent[10]}</div>
+                      <div className="text-xs font-semibold mt-1">12.優位性</div>
+                      <div className="text-xs min-h-[1.5em]">{canvasContent[11]}</div>
+                      <div className="text-xs font-semibold mt-1">13.評価指標</div>
+                      <div className="text-xs min-h-[1.5em]">{canvasContent[12]}</div>
+                      <div className="text-xs font-semibold mt-1">14.ビジネスモデル</div>
+                      <div className="text-xs min-h-[1.5em]">{canvasContent[13]}</div>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  className="px-4 py-2 rounded bg-blue-600 text-white font-semibold shadow hover:bg-blue-700 transition"
+                  onClick={handleCanvasGenerate}
+                >
+                  キャンバス作成
+                </button>
+              </div>
+              {/* 生成された仮説キャンバス出力 */}
+              <div className="mt-4">
+                <h3 className="font-bold mb-2">生成結果</h3>
+                <div className="prose prose-zinc dark:prose-invert whitespace-pre-wrap min-h-[120px]">
+                  {canvasResult ? (
+                    <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{canvasResult}</ReactMarkdown>
+                  ) : (
+                    <span className="text-zinc-400">キャンバス作成ボタンを押すとここに生成結果が表示されます</span>
+                  )}
+                </div>
+              </div>
             </div>
-            <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">生成日時: {new Date(timestamps[currentStep]).toLocaleString()}</p>
+          )}
+        </div>
+        </main>
+        {/* 右端サイドバー：全ステップAI出力履歴（タブ＋カード型） */}
+        <aside className="w-[340px] min-w-[220px] max-w-[400px] border-l border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-4 overflow-auto h-screen rounded-none shadow-none flex flex-col gap-2" style={{ position: 'fixed', right: 0, top: 0, height: '100vh', zIndex: 30 }}>
+          <h3 className="text-base font-bold mb-2 text-blue-700 dark:text-blue-300">全ステップ出力履歴</h3>
+          <div className="flex flex-row gap-1 mb-2 overflow-x-auto">
+            {PROMPT_STEPS.map((step, idx) => (
+              <button
+                key={step.id}
+                className={`px-2 py-1 rounded-t text-xs font-semibold border-b-2 ${historyTab === idx ? "border-blue-600 bg-white dark:bg-zinc-900" : "border-transparent bg-zinc-100 dark:bg-zinc-800"}`}
+                onClick={() => setHistoryTab(idx)}
+              >
+                {step.id}
+              </button>
+            ))}
           </div>
-        )}
-      </main>
+          <div className="flex-1 overflow-auto">
+            <div className="bg-white dark:bg-zinc-900 rounded-lg shadow p-3 border border-zinc-200 dark:border-zinc-800">
+              <div className="font-semibold text-xs mb-1 text-blue-700">{PROMPT_STEPS[historyTab].id}. {PROMPT_STEPS[historyTab].title}</div>
+              <div className="text-xs text-zinc-500 mb-2">{PROMPT_STEPS[historyTab].description}</div>
+              <div className="prose prose-zinc dark:prose-invert whitespace-pre-wrap text-xs">
+                {aiOutputs[historyTab] ? (
+                  <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{aiOutputs[historyTab]}</ReactMarkdown>
+                ) : (
+                  <span className="text-zinc-400">未出力</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
     </div>
   );
-} 
+}

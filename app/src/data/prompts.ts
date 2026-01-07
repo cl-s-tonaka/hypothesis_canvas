@@ -81,3 +81,14 @@ export const PROMPT_STEPS: PromptStep[] = [
     template: `１手目の［アウトプット］を作り出すことで、［アウトカム］の獲得が見込まれ、その先で３手目の［インパクト］が生み出される。\nこのことが伝わるように作成した仮説展開ストーリーからポイントを確認して、ビジネス向きのコピーライターとして、読みやすい文章を作成してください。（200文字～400文字程度）`
   }
 ];
+
+// 14. 仮説キャンバスまとめ（ダミー）
+export const HYPOTHESIS_CANVAS_SUMMARY_STEP = {
+  id: 14,
+  title: '仮説キャンバスまとめ',
+  description: '全ステップの内容をもとに仮説キャンバス図を生成・表示します',
+  template: '',
+};
+
+// まとめステップを含めた全体配列
+export const ALL_STEPS = [...PROMPT_STEPS, HYPOTHESIS_CANVAS_SUMMARY_STEP];
