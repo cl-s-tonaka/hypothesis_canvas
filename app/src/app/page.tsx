@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import { PROMPT_STEPS, ALL_STEPS, HYPOTHESIS_CANVAS_SUMMARY_STEP } from "../data/prompts";
+import { generateMarkdownExport, generateCSVExport } from "../utils/exportTemplates";
 
 type StepStatus = "not-started" | "in-progress" | "completed" | "waiting";
 
@@ -170,6 +171,30 @@ export default function HypothesisCanvasApp() {
     }
   };
 
+  // エクスポート（Markdown）
+  const handleExportMarkdown = () => {
+    const md = generateMarkdownExport(ALL_STEPS, userInputs, aiOutputs, timestamps);
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `hypothesis-canvas-history_${new Date().toISOString().slice(0,10)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // エクスポート（CSV）
+  const handleExportCSV = () => {
+    const csv = generateCSVExport(ALL_STEPS, userInputs, aiOutputs, timestamps);
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `hypothesis-canvas-history_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex h-screen">
       {/* 左ペイン：ステップ一覧 */}
@@ -195,6 +220,21 @@ export default function HypothesisCanvasApp() {
         {/* 中央：ステップ詳細 or 仮説キャンバスまとめ */}
         <main className="flex-1 p-6 overflow-auto flex flex-col gap-6 items-start">
           <div className="w-full max-w-[calc(100vw-400px)] pr-[400px] flex flex-col gap-6">
+            {/* エクスポートボタン */}
+            <div className="flex gap-2 mb-2">
+              <button
+                className="px-3 py-1 rounded bg-green-600 text-white text-sm font-semibold hover:bg-green-700 border border-green-700"
+                onClick={handleExportMarkdown}
+              >
+                Markdownでエクスポート
+              </button>
+              <button
+                className="px-3 py-1 rounded bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 border border-blue-700"
+                onClick={handleExportCSV}
+              >
+                CSVでエクスポート
+              </button>
+            </div>
           {currentStep < PROMPT_STEPS.length ? (
             <>
               <h2 className="text-2xl font-bold mb-4">
